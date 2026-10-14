@@ -1,3 +1,5 @@
+🌐 [正體中文](README.zh-Hant.md) | English
+
 # Private family album proxy
 
 This service proxies a Google Photos **shared** album through a private gallery. It is intended for a small, trusted group.
