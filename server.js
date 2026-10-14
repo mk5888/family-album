@@ -103,6 +103,7 @@ app.post('/api/session', checkLoginLimit, (req, res) => {
   res.status(204).end();
 });
 app.delete('/api/session', (req, res) => { res.clearCookie('family_session', { httpOnly: true, secure: COOKIE_SECURE, sameSite: 'strict', path: '/' }); res.status(204).end(); });
+app.get('/healthz', (req, res) => res.json({ ok: true })); // 無需登入：供 Docker HEALTHCHECK 與監控使用
 app.get('/api/albums', auth, (req, res) => { res.set('Cache-Control', 'private, no-store').json(albums().map(({ id, name }) => ({ id, name }))); });
 app.get('/api/albums/:id', auth, async (req, res, next) => {
   try {

@@ -1,1 +1,257 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>家庭相冊</title><style>body{margin:0;background:#0f172a;color:#f8fafc;font:16px system-ui}header,main{max-width:1100px;margin:auto;padding:16px}.hidden{display:none}#login{max-width:360px;margin:12vh auto;background:#1e293b;padding:24px;border-radius:12px}input,button{box-sizing:border-box;width:100%;padding:12px;margin:8px 0;border-radius:8px;border:0}button{background:#4f46e5;color:white}.gallery{columns:2 180px;gap:10px}.gallery img{width:100%;margin:0 0 10px;border-radius:8px;cursor:pointer}.error{color:#fca5a5}</style></head><body><header><strong>家庭相冊</strong><button id="logout" class="hidden">登出</button></header><section id="login"><h1>家庭相冊</h1><p>輸入通行碼以安全方式開始工作階段。</p><form id="loginForm"><input id="passcode" type="password" autocomplete="current-password" required placeholder="通行碼"><button>進入相冊</button><p id="error" class="error"></p></form></section><main id="app" class="hidden"><h2 id="title"></h2><div id="tabs"></div><p id="count"></p><div id="gallery" class="gallery"></div></main><script>const login=document.querySelector('#login'),app=document.querySelector('#app'),error=document.querySelector('#error'),tabs=document.querySelector('#tabs'),gallery=document.querySelector('#gallery');let albumId='';async function api(url,opt={}){const r=await fetch(url,opt);if(r.status===401)throw Error('登入已過期');if(!r.ok)throw Error('目前無法載入相冊');return r.status===204?null:r.json()}async function loadAlbum(id){albumId=id;const data=await api('/api/albums/'+encodeURIComponent(id));document.querySelector('#title').textContent=data.name;document.querySelector('#count').textContent=`共 ${data.count} 張`;gallery.replaceChildren(...data.photos.map(p=>{const i=new Image();i.loading='lazy';i.src='/api/img?path='+encodeURIComponent(p.path)+'&s=thumb';i.onclick=()=>window.open('/api/img?path='+encodeURIComponent(p.path)+'&s=hd','_blank','noopener');return i}))}async function start(){try{const albums=await api('/api/albums');login.classList.add('hidden');app.classList.remove('hidden');document.querySelector('#logout').classList.remove('hidden');tabs.replaceChildren(...albums.map(a=>{const b=document.createElement('button');b.textContent=a.name;b.onclick=()=>loadAlbum(a.id);return b}));if(albums[0])loadAlbum(albums[0].id)}catch{login.classList.remove('hidden');app.classList.add('hidden')}}document.querySelector('#loginForm').onsubmit=async e=>{e.preventDefault();error.textContent='';try{await api('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passcode:document.querySelector('#passcode').value})});e.target.reset();start()}catch(e){error.textContent=e.message}};document.querySelector('#logout').onclick=async()=>{await fetch('/api/session',{method:'DELETE'});start()};start();</script></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>家庭相冊</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#0f172a;color:#f8fafc;font:16px/1.5 system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;-webkit-tap-highlight-color:transparent}
+.hidden{display:none!important}
+header{position:sticky;top:0;z-index:20;background:rgba(15,23,42,.92);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08)}
+.bar{max-width:1100px;margin:auto;padding:12px 16px;display:flex;align-items:center;gap:10px}
+.bar strong{font-size:18px;white-space:nowrap}
+.bar .count{font-size:12px;color:#94a3b8;white-space:nowrap}
+.bar .sp{flex:1}
+.btn{width:auto;padding:8px 14px;margin:0;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#f8fafc;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn:active{background:rgba(255,255,255,.16)}
+.btn:disabled{opacity:.55}
+.tabs{max-width:1100px;margin:auto;padding:0 16px 12px;display:flex;gap:8px;overflow-x:auto}
+.tabs button{flex:none;width:auto;padding:7px 14px;margin:0;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#f8fafc;font-size:14px;cursor:pointer}
+.tabs button.on{background:#4f46e5;border-color:#4f46e5}
+main{max-width:1100px;margin:auto;padding:16px}
+#login{max-width:360px;margin:12vh auto;background:#1e293b;padding:24px;border-radius:12px}
+#login h1{margin:0 0 4px;font-size:22px}
+#login p.desc{color:#94a3b8;font-size:14px;margin:0 0 8px}
+#login input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:0;background:#0f172a;color:#f8fafc;text-align:center;letter-spacing:.25em;font-size:18px}
+#login button{width:100%;padding:12px;margin:8px 0 0;border-radius:8px;border:0;background:#4f46e5;color:#fff;font-size:16px;cursor:pointer}
+#login button:active{background:#4338ca}
+.error{color:#fca5a5;font-size:14px;min-height:22px;text-align:center;margin:6px 0 0}
+.gallery{columns:2 180px;gap:10px}
+.ph{break-inside:avoid;margin:0 0 10px;border-radius:10px;overflow:hidden;background:#1e293b;cursor:pointer}
+.ph img{width:100%;display:block}
+.state{text-align:center;color:#94a3b8;padding:64px 16px}
+/* 燈箱 */
+#lb{position:fixed;inset:0;z-index:50;background:rgba(2,6,23,.96);display:flex;align-items:center;justify-content:center;touch-action:pan-y}
+#lbImg{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+.lbbtn{position:absolute;z-index:2;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.lbbtn:active{background:rgba(255,255,255,.28)}
+#lbClose{top:14px;right:14px}
+#lbPrev{left:8px;top:50%;transform:translateY(-50%)}
+#lbNext{right:8px;top:50%;transform:translateY(-50%)}
+#lbBar{position:absolute;z-index:2;left:0;right:0;bottom:0;padding:44px 16px 18px;background:linear-gradient(transparent,rgba(0,0,0,.78));display:flex;align-items:center;gap:12px}
+#lbBar .n{font-size:14px;color:#cbd5e1;white-space:nowrap}
+#lbBar .sp{flex:1}
+#lbDl{text-decoration:none;font-size:14px;padding:9px 16px;border-radius:10px;background:#4f46e5;color:#fff;white-space:nowrap}
+#lbDl:active{background:#4338ca}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <strong>家庭相冊</strong>
+    <span class="count" id="count"></span>
+    <span class="sp"></span>
+    <button class="btn hidden" id="sync">同步新照片</button>
+    <button class="btn hidden" id="logout">登出</button>
+  </div>
+  <div class="tabs hidden" id="tabs"></div>
+</header>
+
+<section id="login">
+  <h1>家庭相冊</h1>
+  <p class="desc">輸入通行碼以安全方式開始工作階段。</p>
+  <form id="loginForm">
+    <input id="passcode" type="password" autocomplete="current-password" required placeholder="通行碼">
+    <button>進入相冊</button>
+    <p class="error" id="error"></p>
+  </form>
+</section>
+
+<main id="app" class="hidden">
+  <div class="gallery" id="gallery"></div>
+  <div class="state hidden" id="state"></div>
+</main>
+
+<div id="lb" class="hidden">
+  <img id="lbImg" alt="" draggable="false">
+  <button class="lbbtn" id="lbClose" aria-label="關閉">✕</button>
+  <button class="lbbtn" id="lbPrev" aria-label="上一張">‹</button>
+  <button class="lbbtn" id="lbNext" aria-label="下一張">›</button>
+  <div id="lbBar">
+    <span class="n" id="lbCount"></span>
+    <span class="sp"></span>
+    <a id="lbDl" href="#" download>下載原圖</a>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const loginEl = $('login'), appEl = $('app'), errEl = $('error'),
+      tabsEl = $('tabs'), galEl = $('gallery'), stateEl = $('state'),
+      countEl = $('count'), syncBtn = $('sync'), logoutBtn = $('logout'),
+      lb = $('lb'), lbImg = $('lbImg');
+let albums = [], albumId = '', photos = [], lbIdx = 0;
+
+async function api(url, opt = {}) {
+  const r = await fetch(url, opt);
+  if (!r.ok) { const e = new Error('http-' + r.status); e.status = r.status; throw e; }
+  return r.status === 204 ? null : r.json();
+}
+function showLogin(msg) {
+  loginEl.classList.remove('hidden');
+  appEl.classList.add('hidden');
+  tabsEl.classList.add('hidden');
+  syncBtn.classList.add('hidden');
+  logoutBtn.classList.add('hidden');
+  if (msg) errEl.textContent = msg;
+}
+function showApp() {
+  loginEl.classList.add('hidden');
+  appEl.classList.remove('hidden');
+  tabsEl.classList.remove('hidden');
+  syncBtn.classList.remove('hidden');
+  logoutBtn.classList.remove('hidden');
+}
+function setState(msg) {
+  stateEl.textContent = msg || '';
+  stateEl.classList.toggle('hidden', !msg);
+  galEl.classList.toggle('hidden', !!msg);
+}
+
+async function start() {
+  try {
+    albums = await api('/api/albums');
+    showApp();
+    renderTabs();
+    if (albums.length) loadAlbum(albums[0].id);
+    else setState('還沒有設定任何相冊');
+  } catch (e) {
+    showLogin(e.status === 401 ? '登入已過期，請重新輸入通行碼' : '目前無法載入相冊，請稍後再試');
+  }
+}
+
+function renderTabs() {
+  tabsEl.replaceChildren(...albums.map((a) => {
+    const b = document.createElement('button');
+    b.textContent = a.name;
+    if (a.id === albumId) b.className = 'on';
+    b.onclick = () => loadAlbum(a.id);
+    return b;
+  }));
+}
+
+async function loadAlbum(id, refresh = false) {
+  albumId = id;
+  renderTabs();
+  setState('載入中…');
+  const album = albums.find((a) => a.id === id);
+  try {
+    const data = await api('/api/albums/' + encodeURIComponent(id) + (refresh ? '?refresh=1' : ''));
+    photos = data.photos || [];
+    document.title = data.name + ' - 家庭相冊';
+    countEl.textContent = '共 ' + data.count + ' 張';
+    if (!photos.length) { setState('這個相冊還沒有照片'); return; }
+    setState('');
+    galEl.replaceChildren(...photos.map((p, i) => {
+      const w = document.createElement('div');
+      w.className = 'ph';
+      if (p.width && p.height) w.style.aspectRatio = p.width + '/' + p.height;
+      const img = new Image();
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = '';
+      img.src = '/api/img?path=' + encodeURIComponent(p.path) + '&s=thumb';
+      img.onclick = () => openLb(i);
+      w.appendChild(img);
+      return w;
+    }));
+  } catch (e) {
+    if (e.status === 401) { showLogin('登入已過期，請重新輸入通行碼'); return; }
+    setState('相冊解析失敗，請檢查分享連結是否有效，或稍後再試');
+  }
+}
+
+syncBtn.onclick = async () => {
+  if (!albumId) return;
+  syncBtn.disabled = true;
+  syncBtn.textContent = '同步中…';
+  try { await loadAlbum(albumId, true); }
+  finally { syncBtn.disabled = false; syncBtn.textContent = '同步新照片'; }
+};
+
+/* ---------- 燈箱 ---------- */
+function imgUrl(p, s) { return '/api/img?path=' + encodeURIComponent(p.path) + '&s=' + s; }
+function openLb(i) {
+  lbIdx = i;
+  renderLb();
+  lb.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeLb() {
+  lb.classList.add('hidden');
+  document.body.style.overflow = '';
+  lbImg.removeAttribute('src');
+}
+function renderLb() {
+  const p = photos[lbIdx];
+  if (!p) return;
+  lbImg.src = imgUrl(p, 'hd');
+  $('lbCount').textContent = (lbIdx + 1) + ' / ' + photos.length;
+  $('lbDl').href = imgUrl(p, 'orig');
+}
+function step(d) {
+  lbIdx = (lbIdx + d + photos.length) % photos.length;
+  renderLb();
+}
+$('lbClose').onclick = closeLb;
+$('lbPrev').onclick = (e) => { e.stopPropagation(); step(-1); };
+$('lbNext').onclick = (e) => { e.stopPropagation(); step(1); };
+lb.onclick = (e) => { if (e.target === lb) closeLb(); };
+document.addEventListener('keydown', (e) => {
+  if (lb.classList.contains('hidden')) return;
+  if (e.key === 'Escape') closeLb();
+  else if (e.key === 'ArrowLeft') step(-1);
+  else if (e.key === 'ArrowRight') step(1);
+});
+let touchX = null;
+lb.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+lb.addEventListener('touchend', (e) => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  touchX = null;
+  if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+/* ---------- 登入 / 登出 ---------- */
+$('loginForm').onsubmit = async (e) => {
+  e.preventDefault();
+  errEl.textContent = '';
+  try {
+    await api('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode: $('passcode').value }),
+    });
+    e.target.reset();
+    start();
+  } catch (err) {
+    errEl.textContent =
+      err.status === 401 ? '通行碼不正確' :
+      err.status === 429 ? '嘗試次數過多，請 15 分鐘後再試' :
+      err.status === 503 ? '服務尚未設定通行碼登入' :
+      '服務異常，請稍後再試';
+  }
+};
+logoutBtn.onclick = async () => {
+  try { await fetch('/api/session', { method: 'DELETE' }); } catch (_) { /* 忽略 */ }
+  albumId = ''; photos = []; countEl.textContent = '';
+  start();
+};
+
+start();
+</script>
+</body>
+</html>

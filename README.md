@@ -16,5 +16,6 @@ This service proxies a Google Photos **shared** album through a private gallery.
 2. Run `docker compose up -d --build`.
 3. Put Caddy, Nginx, or Cloudflare Tunnel in front of `127.0.0.1:3000` with HTTPS.
 4. In Cloudflare Zero Trust, create an Access application for the hostname and allow only the exact family email addresses using One-time PIN.
+5. `GET /healthz` is unauthenticated and used by the Docker `HEALTHCHECK`.
 
 Do not commit `.env`, screenshots, real album URLs, passwords, or Cloudflare credentials.
