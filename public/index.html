@@ -30,11 +30,14 @@ main{max-width:1100px;margin:auto;padding:16px}
 .error{color:#fca5a5;font-size:14px;min-height:22px;text-align:center;margin:6px 0 0}
 .gallery{columns:2 180px;gap:10px}
 .ph{break-inside:avoid;margin:0 0 10px;border-radius:10px;overflow:hidden;background:#1e293b;cursor:pointer}
-.ph img{width:100%;display:block}
+.ph{position:relative}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .play{position:absolute;right:8px;bottom:8px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.6);color:#fff;font-size:12px}
+.note{text-align:center;color:#94a3b8;font-size:13px;padding:12px 0 4px}
 .state{text-align:center;color:#94a3b8;padding:64px 16px}
 /* 燈箱 */
 #lb{position:fixed;inset:0;z-index:50;background:rgba(2,6,23,.96);display:flex;align-items:center;justify-content:center;touch-action:pan-y}
-#lbImg{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+#lbImg,#lbVid{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
 .lbbtn{position:absolute;z-index:2;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
 .lbbtn:active{background:rgba(255,255,255,.28)}
 #lbClose{top:14px;right:14px}
@@ -61,8 +64,8 @@ main{max-width:1100px;margin:auto;padding:16px}
 
 <section id="login">
   <h1>家庭相冊</h1>
-  <p class="desc">輸入通行碼以安全方式開始工作階段。</p>
-  <form id="loginForm">
+  <p class="desc" id="loginDesc">輸入通行碼以安全方式開始工作階段。</p>
+  <form id="loginForm" class="hidden">
     <input id="passcode" type="password" autocomplete="current-password" required placeholder="通行碼">
     <button>進入相冊</button>
     <p class="error" id="error"></p>
@@ -72,17 +75,19 @@ main{max-width:1100px;margin:auto;padding:16px}
 <main id="app" class="hidden">
   <div class="gallery" id="gallery"></div>
   <div class="state hidden" id="state"></div>
+  <p class="note hidden" id="note">相冊太大，目前只顯示部分照片。</p>
 </main>
 
 <div id="lb" class="hidden">
   <img id="lbImg" alt="" draggable="false">
+  <video id="lbVid" class="hidden" controls playsinline webkit-playsinline x5-playsinline preload="metadata"></video>
   <button class="lbbtn" id="lbClose" aria-label="關閉">✕</button>
   <button class="lbbtn" id="lbPrev" aria-label="上一張">‹</button>
   <button class="lbbtn" id="lbNext" aria-label="下一張">›</button>
   <div id="lbBar">
     <span class="n" id="lbCount"></span>
     <span class="sp"></span>
-    <a id="lbDl" href="#" download>下載原圖</a>
+    <a id="lbDl" href="#" download>下載原檔</a>
   </div>
 </div>
 
@@ -92,7 +97,8 @@ const $ = (id) => document.getElementById(id);
 const loginEl = $('login'), appEl = $('app'), errEl = $('error'),
       tabsEl = $('tabs'), galEl = $('gallery'), stateEl = $('state'),
       countEl = $('count'), syncBtn = $('sync'), logoutBtn = $('logout'),
-      lb = $('lb'), lbImg = $('lbImg');
+      lb = $('lb'), lbImg = $('lbImg'), lbVid = $('lbVid'), noteEl = $('note');
+let cfg = { passcode: true, invites: false };
 let albums = [], albumId = '', photos = [], lbIdx = 0;
 
 async function api(url, opt = {}) {
@@ -106,7 +112,12 @@ function showLogin(msg) {
   tabsEl.classList.add('hidden');
   syncBtn.classList.add('hidden');
   logoutBtn.classList.add('hidden');
-  if (msg) errEl.textContent = msg;
+  const desc = $('loginDesc');
+  $('loginForm').classList.toggle('hidden', !cfg.passcode);
+  desc.textContent = cfg.passcode
+    ? (cfg.invites ? '請用家人專屬連結開啟，或輸入通行碼。' : '輸入通行碼以安全方式開始工作階段。')
+    : '請用家人傳給你的專屬連結開啟相冊。';
+  errEl.textContent = msg || '';
 }
 function showApp() {
   loginEl.classList.add('hidden');
@@ -122,6 +133,12 @@ function setState(msg) {
 }
 
 async function start() {
+  try { cfg = await api('/api/config'); } catch (_) { /* 用預設 */ }
+  if (new URLSearchParams(location.search).get('invite') === 'invalid') {
+    history.replaceState(null, '', '/');
+    showLogin('這個專屬連結已失效，請向家人要新的連結');
+    return;
+  }
   try {
     albums = await api('/api/albums');
     showApp();
@@ -129,7 +146,7 @@ async function start() {
     if (albums.length) loadAlbum(albums[0].id);
     else setState('還沒有設定任何相冊');
   } catch (e) {
-    showLogin(e.status === 401 ? '登入已過期，請重新輸入通行碼' : '目前無法載入相冊，請稍後再試');
+    showLogin(e.status === 401 ? (cfg.passcode ? '請輸入通行碼' : '') : '目前無法載入相冊，請稍後再試');
   }
 }
 
@@ -152,7 +169,8 @@ async function loadAlbum(id, refresh = false) {
     const data = await api('/api/albums/' + encodeURIComponent(id) + (refresh ? '?refresh=1' : ''));
     photos = data.photos || [];
     document.title = data.name + ' - 家庭相冊';
-    countEl.textContent = '共 ' + data.count + ' 張';
+    countEl.textContent = '共 ' + data.count + ' 項';
+    noteEl.classList.toggle('hidden', !data.truncated);
     if (!photos.length) { setState('這個相冊還沒有照片'); return; }
     setState('');
     galEl.replaceChildren(...photos.map((p, i) => {
@@ -163,13 +181,19 @@ async function loadAlbum(id, refresh = false) {
       img.loading = 'lazy';
       img.decoding = 'async';
       img.alt = '';
-      img.src = '/api/img?path=' + encodeURIComponent(p.path) + '&s=thumb';
-      img.onclick = () => openLb(i);
+      img.src = p.thumb;
+      w.onclick = () => openLb(i);
       w.appendChild(img);
+      if (p.video) {
+        const b = document.createElement('span');
+        b.className = 'play';
+        b.textContent = '▶ ' + fmtDur(p.duration);
+        w.appendChild(b);
+      }
       return w;
     }));
   } catch (e) {
-    if (e.status === 401) { showLogin('登入已過期，請重新輸入通行碼'); return; }
+    if (e.status === 401) { showLogin(cfg.passcode ? '登入已過期，請重新輸入通行碼' : '登入已過期，請重新開啟專屬連結'); return; }
     setState('相冊解析失敗，請檢查分享連結是否有效，或稍後再試');
   }
 }
@@ -183,7 +207,7 @@ syncBtn.onclick = async () => {
 };
 
 /* ---------- 燈箱 ---------- */
-function imgUrl(p, s) { return '/api/img?path=' + encodeURIComponent(p.path) + '&s=' + s; }
+function fmtDur(ms) { if (!ms) return ''; const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function openLb(i) {
   lbIdx = i;
   renderLb();
@@ -194,13 +218,21 @@ function closeLb() {
   lb.classList.add('hidden');
   document.body.style.overflow = '';
   lbImg.removeAttribute('src');
+  lbVid.pause(); lbVid.removeAttribute('src'); lbVid.load();
 }
 function renderLb() {
   const p = photos[lbIdx];
   if (!p) return;
-  lbImg.src = imgUrl(p, 'hd');
+  lbVid.pause();
+  if (p.video) {
+    lbImg.classList.add('hidden'); lbImg.removeAttribute('src');
+    lbVid.classList.remove('hidden'); lbVid.poster = p.hd; lbVid.src = p.src;
+  } else {
+    lbVid.classList.add('hidden'); lbVid.removeAttribute('src');
+    lbImg.classList.remove('hidden'); lbImg.src = p.hd;
+  }
   $('lbCount').textContent = (lbIdx + 1) + ' / ' + photos.length;
-  $('lbDl').href = imgUrl(p, 'orig');
+  $('lbDl').href = p.orig;
 }
 function step(d) {
   lbIdx = (lbIdx + d + photos.length) % photos.length;
