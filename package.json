@@ -2,6 +2,7 @@
   "name": "google-photos-family-proxy",
   "version": "2.0.0",
   "private": true,
+  "license": "MIT",
   "description": "Small private Google Photos shared-album proxy gallery",
   "main": "server.js",
   "scripts": {
